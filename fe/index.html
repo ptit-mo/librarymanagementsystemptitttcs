@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Books</title>
+    <link rel="stylesheet" type="text/css" href="http://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css">
+    <link rel="stylesheet" type="text/css" href="css/index.css">
+</head>
+
+<body>
+    <div>
+        <header class="navbar navbar-static-top" id="navbar"></header>
+        <div class="d-flex">
+            <div class="container" id="addContainer"></div>
+            <div class="container" id="addPreview"></div>
+        </div>
+        <div class="ccenter container">
+            <label for="offset">Next Offset: </label>
+            <input type="number" name="offset" id="offset">
+            <label for="offset">Book ID: </label>
+            <input type="number" name="id" id="book_id">
+            <button id="search">Search</button>
+        </div>
+        <div id="data">
+        </div>
+
+        <script src="js/index.js">        </script>
+        <script src="js/script.js">        </script>
+        <script>
+            generateNavBar()
+            let limit = 100
+            let fetchAllBooks = () => fetchData({
+                url: `/internal/books?offset=${document.getElementById('offset').value || 0}&limit=${limit}`,
+                fetchOptions: {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include'
+
+                },
+                next: (data) => {
+                    console.log(data)
+                    let grid = createGridFromData({
+                        thumbnailKey: 'cover',
+                        data: data,
+                        dataOverlayFormatter: (data) => {
+                            return `${data.title} by ${data.author}`
+                        },
+                    })
+                    document.getElementById("data").innerHTML = grid
+                    if (data.length == limit) {
+                        document.getElementById('offset').value = data[data.length - 1].id
+                    } else {
+                        document.getElementById('offset').value = 0
+                    }
+                }
+            })
+
+            fetchAllBooks()
+            let fetchOneBook = () => fetchData({
+                url: `/internal/book/${document.getElementById('book_id').value}`,
+                fetchOptions: {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include'
+
+                },
+                next: (data) => {
+                    data = [data]
+                    console.log(data)
+                    let grid = createGridFromData({
+                        thumbnailKey: 'cover',
+                        data: data,
+                        dataOverlayFormatter: (data) => {
+                            return `${data.title} by ${data.author}`
+                        },
+                    })
+                    document.getElementById("data").innerHTML = grid
+                    document.getElementById('offset').value = 0
+                    document.getElementById('book_id').value = ""
+                }
+            })
+            document.getElementById("search").addEventListener('click', e => {
+                e.preventDefault()
+                if (!document.getElementById('book_id').value) {
+                    fetchAllBooks()
+                } else {
+                    fetchOneBook()
+                }
+            })
+        </script>
+</body>
+
+</html>

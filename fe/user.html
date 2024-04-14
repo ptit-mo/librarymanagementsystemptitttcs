@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width-device-width, inital-scale=1">
+
+<head>
+    <title>User</title>
+    <link rel="stylesheet" type="text/css" href="http://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css">
+    <link rel="stylesheet" type="text/css" href="css/style.css">
+    <script src="js/script.js"></script>
+
+</head>
+
+<body>
+    <div>
+        <header class="navbar navbar-static-top" id="navbar"></header>
+        <div class="d-flex">
+            <div class="container" id="addContainer"></div>
+            <div class="container" id="addPreview"></div>
+        </div>
+        <div class="ccenter container">
+            <label for="offset">Next Offset: </label>
+            <input type="number" name="offset" id="offset">
+            <button id="search">Search</button>
+        </div>
+        <table id="list">
+        </table>
+    </div>
+    <script>
+        generateNavBar()
+        generateAddForm(itemName = 'user',
+            fields = [
+                { name: 'username', type: 'text', label: 'User Name' },
+                { name: 'email', type: 'email', label: 'Email' },
+                { name: 'password', type: 'text', label: 'Password' },
+                { name: 'type', type: 'select', label: 'Type', selectOptions: ['admin', 'librarian', 'borrower'] },
+            ],
+            submitEndpoint = '/admin/user',
+        )
+        generateListForm(
+            fields = ['id', 'email', 'username', 'type'],
+            submitEndpoint = '/admin/users?',
+        )
+        document.getElementById("search").addEventListener('click', e => {
+            e.preventDefault()
+            generateListForm(
+                fields = ['id', 'email', 'username', 'type'],
+                submitEndpoint = '/admin/users?',
+            )
+        })
+    </script>
+</body>
+
+</html>

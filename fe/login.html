@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login</title>
+    <link rel="stylesheet" type="text/css" href="http://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css">
+    <link rel="stylesheet" type="text/css" href="css/style.css">
+</head>
+
+<body>
+    <header class="navbar navbar-static-top" id="navbar"></header>
+    <form action="/login" method="POST" class="container" name="jsonForm">
+        <label for="username">Username</label>
+        <input type="text" name="username" id="username">
+        <label for="password">Password</label>
+        <input type="password" name="password" id="password">
+        <input value="Login" type="submit">
+    </form>
+    <script src="js/script.js"></script>
+    <script>
+        generateNavBar()
+        document.querySelector("form[name='jsonForm']")
+            .addEventListener("submit", handleFormSubmit)
+    </script>
+</body>
+
+</html>

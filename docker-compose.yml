@@ -1,0 +1,36 @@
+version: "3"
+services:
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - "PORT=8080"
+      - "LOG_LEVEL=INFO"
+      - "LOGIN_DURATION_IN_SECOND=86400"
+      - "MAX_REQUEST_BODY_SIZE=10000000"
+      - "MINIO_ENDPOINT=minio:9000"
+      - "MINIO_ACCESS_KEY=${MINIO_ROOT_USER}"
+      - "MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}"
+      - "MINIO_BUCKET=${MINIO_BUCKET}"
+    volumes:
+      - app:/app
+    depends_on:
+      - minio
+
+  minio:
+    image: minio/minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio:/data
+    environment:
+      - "MINIO_ROOT_USER=${MINIO_ROOT_USER}"
+      - "MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}"
+      - "MINIO_DEFAULT_BUCKETS=${MINIO_BUCKET}"
+    command: server --address 0.0.0.0:9000 --console-address ":9001" /data
+
+volumes:
+  minio:
+  app:
