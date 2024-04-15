@@ -9,7 +9,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/jmoiron/sqlx"
 	"github.com/joho/godotenv"
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/lib/pq"
 )
 
 func main() {
@@ -19,14 +19,14 @@ func main() {
 	}
 	SetLogs()
 	router := mux.NewRouter()
-	dbx, err := sqlx.Connect("sqlite3", "library.db")
+	dbx, err := sqlx.Connect(os.Getenv("DATABASE_DRIVER"), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Fatalf("sqlx.Connect: %v", err)
 	}
-	var bookStore BookStore = NewSQLite3BookStore(dbx)
-	var userStore UserStore = NewSQLite3UserStore(dbx)
-	var borrowHistoryStore BorrowHistoryStore = NewSQLite3BorrowHistoryStore(dbx)
-	var sessionStore SessionStore = NewSQLite3SessionStore(dbx)
+	var bookStore BookStore = NewSQLBookStore(dbx)
+	var userStore UserStore = NewSQLUserStore(dbx)
+	var borrowHistoryStore BorrowHistoryStore = NewSQLBorrowHistoryStore(dbx)
+	var sessionStore SessionStore = NewSQLSessionStore(dbx)
 	imageStore, err := NewMinioImageStore(
 		os.Getenv("MINIO_ENDPOINT"),
 		os.Getenv("MINIO_ACCESS_KEY"),

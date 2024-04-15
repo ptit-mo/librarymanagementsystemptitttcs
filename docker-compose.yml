@@ -1,22 +1,22 @@
 version: "3"
 services:
-  app:
-    build: .
+  database:
+    image: postgres:12
     ports:
-      - "8080:8080"
+      - "5432:5432"
     environment:
-      - "PORT=8080"
-      - "LOG_LEVEL=INFO"
-      - "LOGIN_DURATION_IN_SECOND=86400"
-      - "MAX_REQUEST_BODY_SIZE=10000000"
-      - "MINIO_ENDPOINT=minio:9000"
-      - "MINIO_ACCESS_KEY=${MINIO_ROOT_USER}"
-      - "MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}"
-      - "MINIO_BUCKET=${MINIO_BUCKET}"
+      - "POSTGRES_USER=${POSTGRES_USER}"
+      - "POSTGRES_PASSWORD=${POSTGRES_PASSWORD}"
+      - "POSTGRES_DB=${POSTGRES_DB}"
     volumes:
-      - app:/app
-    depends_on:
-      - minio
+      - database:/var/lib/postgresql/data
+      - ./db.sql:/docker-entrypoint-initdb.d/db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "sh -c 'pg_isready -U postgres -d library'"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
 
   minio:
     image: minio/minio
@@ -28,9 +28,20 @@ services:
     environment:
       - "MINIO_ROOT_USER=${MINIO_ROOT_USER}"
       - "MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}"
-      - "MINIO_DEFAULT_BUCKETS=${MINIO_BUCKET}"
     command: server --address 0.0.0.0:9000 --console-address ":9001" /data
+
+  miniocreatebuckets:
+    image: minio/mc
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc alias set myminio http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD};
+      /usr/bin/mc mb myminio/${MINIO_BUCKET};
+      /usr/bin/mc anonymous set public myminio/${MINIO_BUCKET};
+      exit 0;
+      "
 
 volumes:
   minio:
-  app:
+  database:

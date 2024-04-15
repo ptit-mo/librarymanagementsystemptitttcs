@@ -53,7 +53,7 @@ type BorrowHistory struct {
 type Session struct {
 	UserID    int64     `json:"user_id,omitempty" db:"user_id"`
 	SessionID string    `json:"session_id,omitempty" db:"session_id"`
-	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	CreatedAt time.Time `json:"created_at" db:"updated_at"`
 }
 
 type BookStore interface {
@@ -87,51 +87,54 @@ type SessionStore interface {
 	DeleteSession(sessionID string) error
 }
 
-// SQLite3UserStore implements UserStore interface
-type SQLite3UserStore struct {
+// SQLUserStore implements UserStore interface
+type SQLUserStore struct {
 	db *sqlx.DB
 }
 
-func NewSQLite3UserStore(db *sqlx.DB) *SQLite3UserStore {
-	return &SQLite3UserStore{db: db}
+func NewSQLUserStore(db *sqlx.DB) *SQLUserStore {
+	return &SQLUserStore{db: db}
 }
 
-func (s *SQLite3UserStore) AddUser(user User) (ID int64, err error) {
-	const query = `INSERT INTO users (email, username, password, type) VALUES (:email, :username, :password, :type)`
-	res, err := s.db.NamedExec(query, user)
+func (s *SQLUserStore) AddUser(user User) (ID int64, err error) {
+	const query = `INSERT INTO users (email, username, password, type) VALUES (:email, :username, :password, :type) RETURNING id`
+	namedStmt, err := s.db.PrepareNamed(query)
 	if err != nil {
 		return 0, err
 	}
-	return res.LastInsertId()
+	defer namedStmt.Close()
+	var id int64
+	err = namedStmt.Get(&id, user)
+	return id, err
 }
 
-func (s *SQLite3UserStore) RemoveUser(ID int64) error {
-	const query = `DELETE FROM users WHERE id = ?`
+func (s *SQLUserStore) RemoveUser(ID int64) error {
+	const query = `DELETE FROM users WHERE id = $1`
 	_, err := s.db.Exec(query, ID)
 	return err
 }
 
-func (s *SQLite3UserStore) GetUserByID(ID int64) (User, error) {
-	const query = `SELECT id, username, email, type FROM users WHERE id = ?`
+func (s *SQLUserStore) GetUserByID(ID int64) (User, error) {
+	const query = `SELECT id, username, email, type FROM users WHERE id = $1`
 	var user User
 	err := s.db.Get(&user, query, ID)
 	return user, err
 }
 
-func (s *SQLite3UserStore) UpdateUser(user User) error {
+func (s *SQLUserStore) UpdateUser(user User) error {
 	const query = `UPDATE users SET email = :email, username = :username, password = :password, type = :type WHERE id = :id`
 	_, err := s.db.NamedExec(query, user)
 	return err
 }
 
-func (s *SQLite3UserStore) GetUserByCreds(username, password string) (User, error) {
-	const query = `SELECT id, username, email, type FROM users WHERE username = ? AND password = ?`
+func (s *SQLUserStore) GetUserByCreds(username, password string) (User, error) {
+	const query = `SELECT id, username, email, type FROM users WHERE username = $1 AND password = $2`
 	var user User
 	err := s.db.Get(&user, query, username, password)
 	return user, err
 }
 
-func (s *SQLite3UserStore) ListUsers(offset, limit int64, types []string) ([]User, error) {
+func (s *SQLUserStore) ListUsers(offset, limit int64, types []string) ([]User, error) {
 	var (
 		users []User
 		err   error
@@ -149,22 +152,22 @@ func (s *SQLite3UserStore) ListUsers(offset, limit int64, types []string) ([]Use
 	return users, err
 }
 
-// SQLite3BorrowHistoryStore implements BorrowHistoryStore interface
-type SQLite3BorrowHistoryStore struct {
+// SQLBorrowHistoryStore implements BorrowHistoryStore interface
+type SQLBorrowHistoryStore struct {
 	db *sqlx.DB
 }
 
-func NewSQLite3BorrowHistoryStore(db *sqlx.DB) *SQLite3BorrowHistoryStore {
-	return &SQLite3BorrowHistoryStore{db: db}
+func NewSQLBorrowHistoryStore(db *sqlx.DB) *SQLBorrowHistoryStore {
+	return &SQLBorrowHistoryStore{db: db}
 }
 
-func (s *SQLite3BorrowHistoryStore) AddBorrowHistory(bh BorrowHistory) error {
+func (s *SQLBorrowHistoryStore) AddBorrowHistory(bh BorrowHistory) error {
 	const query = `INSERT INTO borrow_history (user_id, book_id) VALUES (:user_id, :book_id)`
 	_, err := s.db.NamedExec(query, bh)
 	return err
 }
 
-func (s *SQLite3BorrowHistoryStore) UpdateBorrowHistory(bh BorrowHistory) error {
+func (s *SQLBorrowHistoryStore) UpdateBorrowHistory(bh BorrowHistory) error {
 	const query = `UPDATE borrow_history SET user_id = :user_id, book_id = :book_id, returned_at = current_timestamp WHERE id = :id`
 	_, err := s.db.NamedExec(query, bh)
 	return err
@@ -178,45 +181,45 @@ type GetBorrowHistoryDetailResponse struct {
 	Returned_at time.Time `json:"returned_at" db:"returned_at"`
 }
 
-func (s *SQLite3BorrowHistoryStore) ListAllBorrowHistoryByUserID(userID, offset, limit int64) ([]GetBorrowHistoryDetailResponse, error) {
+func (s *SQLBorrowHistoryStore) ListAllBorrowHistoryByUserID(userID, offset, limit int64) ([]GetBorrowHistoryDetailResponse, error) {
 	const query = `SELECT bh.id, username, title, borrowed_at, returned_at
 	FROM borrow_history bh 
 	join users u on bh.user_id = u.id 
 	join books b on bh.book_id = b.id 
-	WHERE user_id = ? AND bh.id > ? LIMIT ?`
+	WHERE user_id = $1 AND bh.id > $2 LIMIT $3`
 	var bh []GetBorrowHistoryDetailResponse
 	err := s.db.Select(&bh, query, userID, offset, limit)
 	return bh, err
 }
 
-func (s *SQLite3BorrowHistoryStore) ListAllBorrowHistory(offset, limit int64) ([]GetBorrowHistoryDetailResponse, error) {
+func (s *SQLBorrowHistoryStore) ListAllBorrowHistory(offset, limit int64) ([]GetBorrowHistoryDetailResponse, error) {
 	const query = `SELECT bh.id, username, title, borrowed_at, returned_at
 	FROM borrow_history bh 
 	join users u on bh.user_id = u.id 
 	join books b on bh.book_id = b.id 
-	WHERE bh.id > ? LIMIT ?`
+	WHERE bh.id > $1 LIMIT $2`
 	var bh []GetBorrowHistoryDetailResponse
 	err := s.db.Select(&bh, query, offset, limit)
 	return bh, err
 }
 
-func (s *SQLite3BorrowHistoryStore) GetBorrowHistory(userID, bookID int64) (BorrowHistory, error) {
-	const query = `SELECT * FROM borrow_history WHERE user_id = ? AND book_id = ?`
+func (s *SQLBorrowHistoryStore) GetBorrowHistory(userID, bookID int64) (BorrowHistory, error) {
+	const query = `SELECT * FROM borrow_history WHERE user_id = $1 AND book_id = $2`
 	var bh BorrowHistory
 	err := s.db.Get(&bh, query, userID, bookID)
 	return bh, err
 }
 
-// SQLite3SessionStore implements SessionStore interface
-type SQLite3SessionStore struct {
+// SQLSessionStore implements SessionStore interface
+type SQLSessionStore struct {
 	db *sqlx.DB
 }
 
-func NewSQLite3SessionStore(db *sqlx.DB) *SQLite3SessionStore {
-	return &SQLite3SessionStore{db: db}
+func NewSQLSessionStore(db *sqlx.DB) *SQLSessionStore {
+	return &SQLSessionStore{db: db}
 }
 
-func (s *SQLite3SessionStore) CreateSession(session Session) error {
+func (s *SQLSessionStore) CreateSession(session Session) error {
 	const query = `INSERT INTO sessions (user_id, session_id) VALUES (:user_id, :session_id) on conflict(user_id) do update set session_id = excluded.session_id `
 	_, err := s.db.NamedExec(query, session)
 	if err != nil {
@@ -233,59 +236,62 @@ type GetSessionResponse struct {
 	SessionCreatedAt time.Time `json:"session_created_at" db:"session_created_at"`
 }
 
-func (s *SQLite3SessionStore) GetUserBySession(sessionID string) (GetSessionResponse, error) {
-	const query = `SELECT u.id as user_id, u.username, u.email, u.type, s.created_at as session_created_at  
-	FROM users u join sessions s on u.id = s.user_id and session_id = ?`
+func (s *SQLSessionStore) GetUserBySession(sessionID string) (GetSessionResponse, error) {
+	const query = `SELECT u.id as user_id, u.username, u.email, u.type, s.updated_at as session_created_at  
+	FROM users u join sessions s on u.id = s.user_id and session_id = $1`
 	var user GetSessionResponse
 	err := s.db.Get(&user, query, sessionID)
 	return user, err
 }
 
-func (s *SQLite3SessionStore) DeleteSession(sessionID string) error {
-	const query = `DELETE FROM sessions WHERE session_id = ?`
+func (s *SQLSessionStore) DeleteSession(sessionID string) error {
+	const query = `DELETE FROM sessions WHERE session_id = $1`
 	_, err := s.db.Exec(query, sessionID)
 	return err
 }
 
-// SQLite3BookStore implements BookStore interface
-type SQLite3BookStore struct {
+// SQLBookStore implements BookStore interface
+type SQLBookStore struct {
 	db *sqlx.DB
 }
 
-func NewSQLite3BookStore(db *sqlx.DB) *SQLite3BookStore {
-	return &SQLite3BookStore{db: db}
+func NewSQLBookStore(db *sqlx.DB) *SQLBookStore {
+	return &SQLBookStore{db: db}
 }
 
-func (s *SQLite3BookStore) AddBook(book Book) (ID int64, err error) {
-	const query = `INSERT INTO books (title, author, type, cover, count) VALUES (:title, :author, :type, :cover, :count)`
-	res, err := s.db.NamedExec(query, book)
+func (s *SQLBookStore) AddBook(book Book) (ID int64, err error) {
+	const query = `INSERT INTO books (title, author, type, cover, count) VALUES (:title, :author, :type, :cover, :count) RETURNING id`
+	namedStmt, err := s.db.PrepareNamed(query)
 	if err != nil {
 		return 0, err
 	}
-	return res.LastInsertId()
+	defer namedStmt.Close()
+	var id int64
+	err = namedStmt.Get(&id, book)
+	return id, err
 }
 
-func (s *SQLite3BookStore) GetBookDetails(ID int64) (Book, error) {
-	const query = `SELECT * FROM books WHERE id = ?`
+func (s *SQLBookStore) GetBookDetails(ID int64) (Book, error) {
+	const query = `SELECT * FROM books WHERE id = $1`
 	var book Book
 	err := s.db.Get(&book, query, ID)
 	return book, err
 }
 
-func (s *SQLite3BookStore) UpdateBook(book Book) error {
+func (s *SQLBookStore) UpdateBook(book Book) error {
 	const query = `UPDATE books SET title = :title, author = :author, type = :type, cover = :cover, count = :count WHERE id = :id`
 	_, err := s.db.NamedExec(query, book)
 	return err
 }
 
-func (s *SQLite3BookStore) RemoveBook(ID int64) error {
-	const query = `DELETE FROM books WHERE id = ?`
+func (s *SQLBookStore) RemoveBook(ID int64) error {
+	const query = `DELETE FROM books WHERE id = $1`
 	_, err := s.db.Exec(query, ID)
 	return err
 }
 
-func (s *SQLite3BookStore) ListBooks(offset, limit int64) ([]Book, error) {
-	var query = `SELECT * FROM books WHERE id > ? LIMIT ?`
+func (s *SQLBookStore) ListBooks(offset, limit int64) ([]Book, error) {
+	var query = `SELECT * FROM books WHERE id > $1 LIMIT $2`
 	var books []Book
 	err := s.db.Select(&books, query, offset, limit)
 	return books, err
