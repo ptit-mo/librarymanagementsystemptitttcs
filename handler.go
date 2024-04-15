@@ -48,6 +48,7 @@ type LoginResponse struct {
 	SessionID string    `json:"session_id"`
 	UserID    int64     `json:"user_id"`
 	ExpiredAt time.Time `json:"expired_at"`
+	UserType  string    `json:"user_type"`
 }
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
@@ -89,6 +90,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		SessionID: sessionID,
 		UserID:    user.ID,
 		ExpiredAt: expiredAt,
+		UserType:  user.Type,
 	})
 }
 

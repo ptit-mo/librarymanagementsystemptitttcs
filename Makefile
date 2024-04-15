@@ -1,4 +1,6 @@
 up:
+	docker-compose up -d
+buildup:
 	docker-compose up --build -d
 populate-data:
 	./scripts/populate_data.sh
