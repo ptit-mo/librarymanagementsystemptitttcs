@@ -11,6 +11,7 @@
 
 <body>
     <header class="navbar navbar-static-top" id="navbar"></header>
+    <div class="container">Welcome to the library!</div>
     <form action="/login" method="POST" class="container" name="jsonForm">
         <label for="username">Username</label>
         <input type="text" name="username" id="username">
@@ -18,11 +19,16 @@
         <input type="password" name="password" id="password">
         <input value="Login" type="submit">
     </form>
+    <div id="status-box"></div>
     <script src="js/script.js"></script>
     <script>
         generateNavBar()
+        handleLoginResponse = (data) => {
+            localStorage.setItem('user_type', data.user_type)
+            window.location.href = "/fe/index.html"
+        }
         document.querySelector("form[name='jsonForm']")
-            .addEventListener("submit", handleFormSubmit)
+            .addEventListener("submit", async (e) => await handleFormSubmit(e, handleLoginResponse))
     </script>
 </body>
 

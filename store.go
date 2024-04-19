@@ -37,7 +37,7 @@ type Book struct {
 	Author    string    `json:"author,omitempty" db:"author"`
 	Type      string    `json:"type,omitempty" db:"type"`
 	CoverUrl  string    `json:"cover" db:"cover"`
-	Count     int       `json:"count,omitempty" db:"count"`
+	Count     int       `json:"count" db:"count"`
 	CreatedAt time.Time `json:"-" db:"created_at"`
 	UpdatedAt time.Time `json:"-" db:"updated_at"`
 }
@@ -47,7 +47,7 @@ type BorrowHistory struct {
 	UserID     int64     `json:"user_id,omitempty" db:"user_id"`
 	BookID     int64     `json:"book_id,omitempty" db:"book_id"`
 	BorrowedAt time.Time `json:"borrowed_at,omitempty" db:"borrowed_at"`
-	ReturnedAt time.Time `json:"returned_at,omitempty" db:"returned_at"`
+	Returned   bool      `json:"returned" db:"returned"`
 }
 
 type Session struct {
@@ -61,15 +61,16 @@ type BookStore interface {
 	GetBookDetails(ID int64) (Book, error)
 	UpdateBook(book Book) error
 	RemoveBook(ID int64) error
-	ListBooks(offset, limit int64) ([]Book, error)
+	ListBooks(lastID, limit int64, order string) ([]Book, error)
 }
 
 type BorrowHistoryStore interface {
-	AddBorrowHistory(BorrowHistory) error
-	UpdateBorrowHistory(BorrowHistory) error
-	ListAllBorrowHistoryByUserID(userID, offset, limit int64) ([]GetBorrowHistoryDetailResponse, error)
-	ListAllBorrowHistory(offset, limit int64) ([]GetBorrowHistoryDetailResponse, error)
+	BorrowBook(user_id, book_id int64) error
+	ReturnBook(id int64) error
+	ListAllBorrowHistoryByUserID(userID, lastID, limit int64) ([]GetBorrowHistoryDetailResponse, error)
+	ListAllBorrowHistory(lastID, limit int64) ([]GetBorrowHistoryDetailResponse, error)
 	GetBorrowHistory(userID, bookID int64) (BorrowHistory, error)
+	CountActiveBorrowedBooksByUserID(userID int64) (int64, error)
 }
 
 type UserStore interface {
@@ -78,7 +79,7 @@ type UserStore interface {
 	GetUserByID(ID int64) (User, error)
 	UpdateUser(user User) error
 	GetUserByCreds(username, password string) (User, error)
-	ListUsers(offset, limit int64, types []string) ([]User, error)
+	ListUsers(lastID, limit int64, order string, types []string) ([]User, error)
 }
 
 type SessionStore interface {
@@ -134,22 +135,56 @@ func (s *SQLUserStore) GetUserByCreds(username, password string) (User, error) {
 	return user, err
 }
 
-func (s *SQLUserStore) ListUsers(offset, limit int64, types []string) ([]User, error) {
-	var (
-		users []User
-		err   error
-	)
-	query := `SELECT id, username, email, type FROM users WHERE id > ? AND type IN (?) LIMIT ?`
+func (s *SQLUserStore) ListUsers(lastID, limit int64, order string, types []string) ([]User, error) {
+	switch order {
+	case "asc":
+		return s.listUsersAsc(lastID, limit, types)
+	case "desc":
+		return s.listUsersDesc(lastID, limit, types)
+	default:
+		return nil, fmt.Errorf("invalid order: %s", order)
+	}
+}
+
+func (s *SQLUserStore) listUsersAsc(lastID, limit int64, types []string) ([]User, error) {
 	if len(types) == 0 {
 		types = []string{Admin, Librarian, Borrower}
 	}
-	query, args, err := sqlx.In(query, offset, types, limit)
+	args := []interface{}{lastID, types, limit}
+	query := `SELECT id, username, email, type FROM users WHERE id > ? and type in (?) ORDER BY id ASC LIMIT ?`
+	if lastID <= 0 {
+		args = []interface{}{types, limit}
+		query = `SELECT id, username, email, type FROM users WHERE type IN (?) ORDER BY id ASC LIMIT ?`
+	}
+	query, args, err := sqlx.In(query, args...)
 	if err != nil {
 		return nil, err
 	}
+	var users []User
 	query = s.db.Rebind(query)
 	err = s.db.Select(&users, query, args...)
 	return users, err
+}
+
+func (s *SQLUserStore) listUsersDesc(lastID, limit int64, types []string) ([]User, error) {
+	if len(types) == 0 {
+		types = []string{Admin, Librarian, Borrower}
+	}
+	args := []interface{}{lastID, types, limit}
+	query := `SELECT id, username, email, type FROM users WHERE id < ? and type in (?) ORDER BY id DESC LIMIT ?`
+	if lastID <= 0 {
+		args = []interface{}{types, limit}
+		query = `SELECT id, username, email, type FROM users WHERE type IN (?) ORDER BY id DESC LIMIT ?`
+	}
+	query, args, err := sqlx.In(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	var users []User
+	query = s.db.Rebind(query)
+	err = s.db.Select(&users, query, args...)
+	return users, err
+
 }
 
 // SQLBorrowHistoryStore implements BorrowHistoryStore interface
@@ -161,45 +196,93 @@ func NewSQLBorrowHistoryStore(db *sqlx.DB) *SQLBorrowHistoryStore {
 	return &SQLBorrowHistoryStore{db: db}
 }
 
-func (s *SQLBorrowHistoryStore) AddBorrowHistory(bh BorrowHistory) error {
-	const query = `INSERT INTO borrow_history (user_id, book_id) VALUES (:user_id, :book_id)`
-	_, err := s.db.NamedExec(query, bh)
-	return err
+func (s *SQLBorrowHistoryStore) BorrowBook(userID, bookID int64) error {
+	tx := s.db.MustBegin()
+	var err error
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+			return
+		}
+		tx.Commit()
+	}()
+	var currentlyBorrowing int64
+	err = tx.Get(&currentlyBorrowing, "SELECT count(*) FROM borrow_history WHERE user_id = $1 and book_id = $2 and returned = false", userID, bookID)
+	if err != nil {
+		return fmt.Errorf("failed to check if user is currently borrowing the book: %v", err)
+	}
+	if currentlyBorrowing > 0 {
+		return fmt.Errorf("user is currently borrowing the book")
+	}
+	_, err = tx.Exec("INSERT INTO borrow_history (user_id, book_id) VALUES ($1, $2) on conflict (user_id, book_id) do update set borrowed_at = current_timestamp, returned = false", userID, bookID)
+	if err != nil {
+		return fmt.Errorf("failed to insert borrow history: %v", err)
+	}
+	_, err = tx.Exec("UPDATE books SET count = count - 1 WHERE id = $1 and count > 0", bookID)
+	if err != nil {
+		return fmt.Errorf("failed to update book count: %v", err)
+	}
+	return nil
 }
 
-func (s *SQLBorrowHistoryStore) UpdateBorrowHistory(bh BorrowHistory) error {
-	const query = `UPDATE borrow_history SET user_id = :user_id, book_id = :book_id, returned_at = current_timestamp WHERE id = :id`
-	_, err := s.db.NamedExec(query, bh)
-	return err
+func (s *SQLBorrowHistoryStore) ReturnBook(id int64) error {
+	tx := s.db.MustBegin()
+	var err error
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+			return
+		}
+		tx.Commit()
+	}()
+	var bookID int64
+	err = tx.Get(&bookID, "UPDATE borrow_history SET returned = true WHERE id = $1 and returned = false returning book_id", id)
+	if err != nil {
+		return fmt.Errorf("failed to update borrow history: %v", err)
+	}
+	_, err = tx.Exec("UPDATE books SET count = count + 1 WHERE id = $1", bookID)
+	if err != nil {
+		return fmt.Errorf("failed to update book count: %v", err)
+	}
+	return nil
 }
 
 type GetBorrowHistoryDetailResponse struct {
 	ID          int64     `json:"id" db:"id"`
+	UserID      int64     `json:"user_id" db:"user_id"`
 	Username    string    `json:"username" db:"username"`
+	BookID      int64     `json:"book_id" db:"book_id"`
 	BookTitle   string    `json:"title" db:"title"`
 	Borrowed_at time.Time `json:"borrowed_at" db:"borrowed_at"`
-	Returned_at time.Time `json:"returned_at" db:"returned_at"`
+	Returned    bool      `json:"returned" db:"returned"`
 }
 
-func (s *SQLBorrowHistoryStore) ListAllBorrowHistoryByUserID(userID, offset, limit int64) ([]GetBorrowHistoryDetailResponse, error) {
-	const query = `SELECT bh.id, username, title, borrowed_at, returned_at
+func (s *SQLBorrowHistoryStore) CountActiveBorrowedBooksByUserID(userID int64) (int64, error) {
+	const query = `SELECT count(*) from borrow_history WHERE user_id = $1 and returned = false`
+	var cnt int64
+	err := s.db.Get(&cnt, query, userID)
+	return cnt, err
+}
+
+func (s *SQLBorrowHistoryStore) ListAllBorrowHistoryByUserID(userID, lastID, limit int64) ([]GetBorrowHistoryDetailResponse, error) {
+	const query = `SELECT bh.id, username, u.id as user_id, title, b.id as book_id, borrowed_at, returned
 	FROM borrow_history bh 
 	join users u on bh.user_id = u.id 
 	join books b on bh.book_id = b.id 
-	WHERE user_id = $1 AND bh.id > $2 LIMIT $3`
+	WHERE user_id = $1 AND bh.id > $2 ORDER BY id DESC LIMIT $3`
 	var bh []GetBorrowHistoryDetailResponse
-	err := s.db.Select(&bh, query, userID, offset, limit)
+	err := s.db.Select(&bh, query, userID, lastID, limit)
 	return bh, err
 }
 
-func (s *SQLBorrowHistoryStore) ListAllBorrowHistory(offset, limit int64) ([]GetBorrowHistoryDetailResponse, error) {
-	const query = `SELECT bh.id, username, title, borrowed_at, returned_at
+func (s *SQLBorrowHistoryStore) ListAllBorrowHistory(lastID, limit int64) ([]GetBorrowHistoryDetailResponse, error) {
+	const query = `SELECT bh.id, username, u.id as user_id, title, b.id as book_id, borrowed_at, returned
 	FROM borrow_history bh 
 	join users u on bh.user_id = u.id 
 	join books b on bh.book_id = b.id 
-	WHERE bh.id > $1 LIMIT $2`
+	WHERE bh.id > $1 ORDER BY id DESC LIMIT $2`
 	var bh []GetBorrowHistoryDetailResponse
-	err := s.db.Select(&bh, query, offset, limit)
+	err := s.db.Select(&bh, query, lastID, limit)
 	return bh, err
 }
 
@@ -290,10 +373,38 @@ func (s *SQLBookStore) RemoveBook(ID int64) error {
 	return err
 }
 
-func (s *SQLBookStore) ListBooks(offset, limit int64) ([]Book, error) {
-	var query = `SELECT * FROM books WHERE id > $1 LIMIT $2`
+func (s *SQLBookStore) ListBooks(lastID, limit int64, order string) ([]Book, error) {
+	switch order {
+	case "asc":
+		return s.listBooksAsc(lastID, limit)
+	case "desc":
+		return s.listBooksDesc(lastID, limit)
+	default:
+		return nil, fmt.Errorf("invalid order: %s", order)
+	}
+}
+
+func (s *SQLBookStore) listBooksAsc(lastID, limit int64) ([]Book, error) {
+	args := []interface{}{lastID, limit}
+	query := `SELECT * FROM books WHERE id > $1 ORDER BY id ASC LIMIT $2`
+	if lastID <= 0 {
+		args = []interface{}{limit}
+		query = `SELECT * FROM books ORDER BY id ASC LIMIT $1`
+	}
 	var books []Book
-	err := s.db.Select(&books, query, offset, limit)
+	err := s.db.Select(&books, query, args...)
+	return books, err
+}
+
+func (s *SQLBookStore) listBooksDesc(lastID, limit int64) ([]Book, error) {
+	args := []interface{}{lastID, limit}
+	query := `SELECT * FROM books WHERE id < $1 ORDER BY id DESC LIMIT $2`
+	if lastID <= 0 {
+		args = []interface{}{limit}
+		query = `SELECT * FROM books ORDER BY id DESC LIMIT $1`
+	}
+	var books []Book
+	err := s.db.Select(&books, query, args...)
 	return books, err
 }
 

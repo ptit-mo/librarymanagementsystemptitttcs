@@ -32,7 +32,8 @@ insert into users(email, username, password, type) values
     cover  text DEFAULT '',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    constraint unique_book_per_author UNIQUE(title, author)
+    constraint unique_book_per_author UNIQUE(title, author),
+    constraint positive_count CHECK (count >= 0)
 );
 create trigger update_books_updated_at before UPDATE on books for each row execute procedure update_updated_at_column();
 
@@ -51,7 +52,8 @@ create trigger update_sessions_updated_at before UPDATE on sessions for each row
     user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     book_id INT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
     borrowed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    returned_at TIMESTAMPTZ NOT NULL DEFAULT '2024-01-01'::timestamp
+    returned BOOLEAN NOT NULL DEFAULT FALSE, 
+    constraint unique_book_per_borrower UNIQUE(book_id, user_id)
 );
 
 commit ;

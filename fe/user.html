@@ -15,38 +15,142 @@
     <div>
         <header class="navbar navbar-static-top" id="navbar"></header>
         <div class="d-flex">
-            <div class="container" id="addContainer"></div>
-            <div class="container" id="addPreview"></div>
+            <div class="container" id="addContainer">
+                <form>
+
+
+                    <div class="form-group">
+                        <label class="input-group-text" for="username">User Name:</label>
+                        <input type="text" class="form-control" id="user-username" name="username" required="">
+                        <div data-lastpass-icon-root=""
+                            style="position: relative !important; height: 0px !important; width: 0px !important; float: left !important;">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="input-group-text" for="email">Email:</label>
+                        <input type="email" class="form-control" id="user-email" name="email" required="">
+                        <div data-lastpass-icon-root=""
+                            style="position: relative !important; height: 0px !important; width: 0px !important; float: left !important;">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="input-group-text" for="password">Password:</label>
+                        <input type="text" class="form-control" id="user-password" name="password" required="">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="input-group-text" for="type">Type:</label>
+                        <select id="user-type" name="type">
+                            <option value="borrower">borrower</option>
+                            <option value="admin">admin</option>
+                            <option value="librarian">librarian</option>
+                        </select>
+                    </div>
+
+                    <input type="submit" value="Add new user">
+
+                </form>
+            </div>
+            <div class="container" id="addPreview">
+                <div>
+                    <div class="preview" id="userpreview">
+                        <h3>Preview</h3>
+
+                        <p><strong>User Name:</strong> <span id="user-usernamepreview"></span></p>
+
+                        <p><strong>Email:</strong> <span id="user-emailpreview"></span></p>
+
+                        <p><strong>Password:</strong> <span id="user-passwordpreview"></span></p>
+
+                        <p><strong>Type:</strong> <span id="user-typepreview"></span></p>
+
+                    </div>
+                </div>
+            </div>
         </div>
+        <div id="status-box"></div>
         <div class="ccenter container">
-            <label for="offset">Next Offset: </label>
-            <input type="number" name="offset" id="offset">
             <button id="search">Search</button>
         </div>
-        <table id="list">
+        <table>
+            <thead>
+                <tr>
+                    <th id="id-header">id</th>
+                    <th id="username-header">title</th>
+                    <th id="email-header">author</th>
+                    <th id="type-header">type</th>
+                    <th id="edit-header">edit</th>
+                </tr>
+            </thead>
+            <tbody id="list"></tbody>
         </table>
     </div>
     <script>
+        const userSearchState = {
+            limit: 10,
+            lastFetchedID: -1,
+        }
         generateNavBar()
-        generateAddForm(itemName = 'user',
-            fields = [
-                { name: 'username', type: 'text', label: 'User Name' },
-                { name: 'email', type: 'email', label: 'Email' },
-                { name: 'password', type: 'text', label: 'Password' },
-                { name: 'type', type: 'select', label: 'Type', selectOptions: ['admin', 'librarian', 'borrower'] },
-            ],
-            submitEndpoint = '/admin/user',
-        )
-        generateListForm(
-            fields = ['id', 'email', 'username', 'type'],
-            submitEndpoint = '/admin/users?',
-        )
+        for (let id of ['username', 'email', 'password', 'type']) {
+            let inp = document.getElementById(`user-${id}`)
+            document.getElementById(`user-${id}preview`).innerText = inp.value
+            inp.addEventListener('input', e => {
+                document.getElementById(`user-${id}preview`).innerText = e.target.value
+            })
+        }
+        // handle form submit
+        document.querySelector('form').addEventListener('submit', async e => {
+            e.preventDefault()
+            // then upload user
+            const formData = new FormData()
+            for (let field of ['username', 'email', 'password', 'type']) {
+                formData.append(field, document.getElementById(`user-${field}`).value)
+            }
+            response = await postFormDataAsJson({ url: '/admin/user', formData: formData })
+            userSearchState.lastFetchedID = -1
+            await fetchManyUsers()
+        })
+
+        // handle list
+        fetchManyUsers = async () => {
+            const response = await fetchData(`/admin/users?lastID=${userSearchState.lastFetchedID}&limit=${userSearchState.limit}&ord=desc`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include'
+            })
+            const data = await response;
+            document.getElementById("list").innerHTML = ""
+            data.forEach(item => {
+                const row = document.createElement('tr')
+                row.id = item.id + "-user-row"
+                row.innerHTML = `
+                <td>${item.id}</td>
+                <td>${item.username}</td>
+                <td>${item.email}</td>
+                <td>${item.type}</td>
+                <td><button id="${item.id}-user-btn">Remove</button></td>`
+                document.getElementById("list").appendChild(row)
+
+                document.getElementById(`${item.id}-user-btn`).addEventListener('click', e => {
+                    e.preventDefault()
+                    removeByID('/admin/user/{id}', item.id)
+                    document.getElementById(item.id + "-user-row").remove()
+                })
+            })
+            if (data.length == userSearchState.limit) {
+                userSearchState.lastFetchedID = data[data.length - 1].id
+            } else {
+                userSearchState.lastFetchedID = -1
+            }
+        }
+        window.onload = async () => await fetchManyUsers()
         document.getElementById("search").addEventListener('click', e => {
             e.preventDefault()
-            generateListForm(
-                fields = ['id', 'email', 'username', 'type'],
-                submitEndpoint = '/admin/users?',
-            )
+            fetchManyUsers()
         })
     </script>
 </body>

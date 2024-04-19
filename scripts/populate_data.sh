@@ -34,18 +34,20 @@ done
 
 # add some users
 declare -a user_ids
+borrower_password="brr"
 for i in {1..10}
 do
-    user_id=$(curl 'http://localhost:8080/admin/user' -H "Cookie: ${cookie}" --data-raw "{\"username\":\"borrower${i}\",\"password\":\"pwd\",\"type\":\"borrower\", \"email\":\"borrower${i}@localhost.com\"}" | jq -r .id)
+    user_id=$(curl 'http://localhost:8080/admin/user' -H "Cookie: ${cookie}" --data-raw "{\"username\":\"borrower${i}\",\"password\":\"${borrower_password}\",\"type\":\"borrower\", \"email\":\"borrower${i}@localhost.com\"}" | jq -r .id)
     if [ "$user_id" == "null" ]; then
       echo "Failed to add borrower $i"
       exit 1
     fi
   user_ids+=($user_id)
 done
+librarian_password="lbr"
 for i in {1..3}
 do
-  curl 'http://localhost:8080/admin/user' -H "Cookie: ${cookie}" --data-raw "{\"username\":\"librarian${i}\",\"password\":\"pwd\",\"type\":\"librarian\", \"email\":\"librarian${i}@localhost.com\"}"
+  curl 'http://localhost:8080/admin/user' -H "Cookie: ${cookie}" --data-raw "{\"username\":\"librarian${i}\",\"password\":\"${librarian_password}\",\"type\":\"librarian\", \"email\":\"librarian${i}@localhost.com\"}"
     if [ "$user_id" == "null" ]; then
       echo "Failed to add librarian $i"
       exit 1
@@ -53,7 +55,7 @@ do
 done
 
 # some users borrow some books
-for uid in "${user_ids[@]:0:1}"
+for uid in "${user_ids[@]:0:5}"
 do
     for bid in "${book_ids[@]:0:3}"
     do

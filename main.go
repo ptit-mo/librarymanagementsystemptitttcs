@@ -41,7 +41,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("empty or invalid setting for env LOGIN_DURATION_IN_SECOND: %s. expect INTEGER", os.Getenv("LOGIN_DURATION_IN_SECOND"))
 	}
-	handler := NewHandler(sessionStore, bookStore, userStore, borrowHistoryStore, imageStore, loginDurationInSecond)
+	maxBooksEachUserCanBorrow, err := strconv.ParseInt(os.Getenv("MAX_BOOKS_EACH_USER_CAN_BORROW"), 10, 64)
+	if err != nil {
+		log.Fatalf("empty or invalid setting for env MAX_BOOKS_EACH_USER_CAN_BORROW: %s. expect INTEGER", os.Getenv("MAX_BOOKS_EACH_USER_CAN_BORROW"))
+	}
+	handler := NewHandler(sessionStore, bookStore, userStore, borrowHistoryStore, imageStore, loginDurationInSecond, maxBooksEachUserCanBorrow)
 	RoutesMux(handler, router)
 	SetCors(router)
 	Serve(router)
@@ -60,8 +64,8 @@ func RoutesMux(handler *Handler, r *mux.Router) {
 	internal.HandleFunc("/book/{id}", handler.GetBookDetails).Methods(http.MethodGet)
 	internal.HandleFunc("/mybooks", handler.ListMyBooks).Methods(http.MethodGet)
 	internal.HandleFunc("/books", handler.ListAllBooks).Methods(http.MethodGet)
-	internal.HandleFunc("/borrowhistory", handler.GetBorrowHistory).Methods(http.MethodGet)
 	internal.HandleFunc("/user/{id}", handler.GetUserByID).Methods(http.MethodGet)
+	internal.HandleFunc("/borrowhistory", handler.ListBorrowHistoryPerUser).Methods(http.MethodGet)
 
 	admin := r.PathPrefix("/admin").Subrouter()
 	admin.Use(handler.GenerateAuthMiddleware(Librarian))
@@ -76,6 +80,8 @@ func RoutesMux(handler *Handler, r *mux.Router) {
 	librarian.HandleFunc("/book", handler.AddBook).Methods(http.MethodPost)
 	librarian.HandleFunc("/book", handler.UpdateBook).Methods(http.MethodPut)
 	librarian.HandleFunc("/book/{id}", handler.RemoveBook).Methods(http.MethodDelete)
+	librarian.HandleFunc("/borrowcount/{user_id}", handler.CountBorrowedBooksByUserID).Methods(http.MethodGet)
 	librarian.HandleFunc("/bookborrow", handler.BorrowBook).Methods(http.MethodPost)
-	librarian.HandleFunc("/bookreturn", handler.ReturnBook).Methods(http.MethodPost)
+	librarian.HandleFunc("/bookreturn/{id}", handler.ReturnBook).Methods(http.MethodDelete)
+	librarian.HandleFunc("/borrowrecord", handler.GetBorrowRecord).Methods(http.MethodGet)
 }

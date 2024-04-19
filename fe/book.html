@@ -7,7 +7,6 @@
     <title>Book</title>
     <link rel="stylesheet" type="text/css" href="http://maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css">
     <link rel="stylesheet" type="text/css" href="css/style.css">
-    <script src="js/script.js"></script>
 
 </head>
 
@@ -15,40 +14,175 @@
     <div>
         <header class="navbar navbar-static-top" id="navbar"></header>
         <div class="d-flex">
-            <div class="container" id="addContainer"></div>
-            <div class="container" id="addPreview"></div>
+            <div class="container" id="formcontainer">
+                <form>
+                    <div class="form-group">
+                        <label class="input-group-text" for="title">Title:</label>
+                        <input type="text" class="form-control" class="needpreview" id="book-title" name="title"
+                            required="">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="input-group-text" for="author">Author:</label>
+                        <input type="text" class="form-control" class="needpreview" id="book-author" name="author"
+                            required="">
+                    </div>
+
+                    <div class="input-group mb-3">
+                        <label class="input-group-text" for="cover">Cover:</label>
+                        <input type="file" class="form-control" class="needpreview" id="book-cover" name="cover"
+                            accept="image/*" required="">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="input-group-text" for="count">Quantity:</label>
+                        <input type="number" class="form-control" class="needpreview" id="book-count" name="count"
+                            value="1" required="">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="input-group-text" for="type">Type:</label>
+                        <select class="needpreview" id="book-type" name="type">
+                            <option value="others">others</option>
+                            <option value="fiction">fiction</option>
+                            <option value="non-fiction">non-fiction</option>
+                            <option value="spiritual">spiritual</option>
+                        </select>
+                    </div>
+
+                    <input type="submit" value="Add new book">
+
+                </form>
+            </div>
+            <div class="container" id="addPreview">
+                <div>
+                    <div class="preview" id="bookpreview">
+                        <h3>Preview</h3>
+
+                        <p><strong>Title:</strong> <span id="book-titlepreview"></span></p>
+
+                        <p><strong>Author:</strong> <span id="book-authorpreview"></span></p>
+
+                        <p><strong>Cover:</strong> <span id="book-coverpreview"></span></p>
+
+                        <p><strong>Quantity:</strong> <span id="book-countpreview"></span></p>
+
+                        <p><strong>Type:</strong> <span id="book-typepreview"></span></p>
+
+                    </div>
+                </div>
+            </div>
         </div>
         <div id="status-box"></div>
         <div class="ccenter container">
-            <label for="offset">Next Offset: </label>
-            <input type="number" name="offset" id="offset">
-            <button id="search">Search</button>
+            <button id="search">Next</button>
         </div>
-        <table id="list">
+        <table>
+            <thead>
+                <tr>
+                    <th id="id-header">id</th>
+                    <th id="title-header">title</th>
+                    <th id="author-header">author</th>
+                    <th id="type-header">type</th>
+                    <th id="count-header">count</th>
+                    <th id="cover-header">cover</th>
+                    <th id="edit-header">edit</th>
+                </tr>
+            </thead>
+            <tbody id="list"></tbody>
         </table>
     </div>
+    <script src="js/script.js"></script>
     <script>
+        const bookSearchState = {
+            limit: 10,
+            lastFetchedID: -1,
+        }
         generateNavBar()
-        generateAddForm(itemName = 'book',
-            fields = [
-                { name: 'title', type: 'text', label: 'Title' },
-                { name: 'author', type: 'text', label: 'Author' },
-                { name: 'cover', type: 'file', label: 'Cover' },
-                { name: 'count', type: 'number', label: 'Quantity', default: 1 },
-                { name: 'type', type: 'select', label: 'Type', selectOptions: ['fiction', 'non-fiction', 'spiritual'] },
-            ],
-            submitEndpoint = '/librarian/book',
-        )
-        generateListForm(
-            fields = ['id', 'title', 'author', 'type', 'count', 'cover'],
-            submitEndpoint = '/internal/books?',
-        )
+        for (let id of ['title', 'author', 'type', 'count']) {
+            let inp = document.getElementById(`book-${id}`)
+            document.getElementById(`book-${id}preview`).innerText = inp.value
+            inp.addEventListener('input', e => {
+                document.getElementById(`book-${id}preview`).innerText = e.target.value
+            })
+        }
+        // update file preview
+        document.getElementById("book-cover").addEventListener('change', e => {
+            const file = e.target.files[0]
+            const reader = new FileReader()
+            reader.onload = e => {
+                document.getElementById('book-coverpreview').innerHTML = `<img style="display: block; max-width: 300px; max-height: 200px; width: auto; height: auto" src="${e.target.result}" alt="Uploaded image" />`;
+            }
+            reader.readAsDataURL(file)
+        })
+        // handle form submit
+        document.querySelector('form').addEventListener('submit', async e => {
+            e.preventDefault()
+            // upload cover first
+            const fileInput = document.getElementById("book-cover");
+            const file = fileInput.files[0];
+            if (!file) {
+                throw Error('No file selected');
+            }
+            const fileData = new FormData();
+            fileData.append('file', file);
+            let response = await fetchData('/admin/uploadimage', {
+                method: 'POST',
+                body: fileData,
+                credentials: 'include'
+            })
+            let data = await response
+            // then upload book
+            const formData = new FormData()
+            for (let field of ['title', 'author', 'type', 'count']) {
+                formData.append(field, document.getElementById(`book-${field}`).value)
+            }
+            formData.append('cover', data.path)
+            response = await postFormDataAsJson({ url: '/librarian/book', formData: formData, intInputFields: ['count'] })
+            bookSearchState.lastFetchedID = -1
+            await fetchManyBooks()
+        })
+
+        // handle list
+        fetchManyBooks = async () => {
+            const response = await fetchData(`/internal/books?lastID=${bookSearchState.lastFetchedID}&limit=${bookSearchState.limit}&ord=desc`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include'
+            })
+            const data = await response;
+            document.getElementById("list").innerHTML = ""
+            data.forEach(item => {
+                const row = document.createElement('tr')
+                row.id = item.id + "-book-row"
+                row.innerHTML = `
+                <td>${item.id}</td>
+                <td>${item.title}</td>
+                <td>${item.author}</td>
+                <td>${item.type}</td>
+                <td>${item.count}</td>
+                <td><img style="display: block; max-width: 300px; max-height: 200px; width: auto; height: auto" src="${item.cover}" alt="Uploaded image" /></td>
+                <td><button id="${item.id}-book-btn">Remove</button></td>`
+                document.getElementById("list").appendChild(row)
+
+                document.getElementById(`${item.id}-book-btn`).addEventListener('click', e => {
+                    e.preventDefault()
+                    removeByID('/librarian/book/{id}', item.id)
+                    document.getElementById(item.id + "-book-row").remove()
+                })
+            })
+            if (data.length == bookSearchState.limit) {
+                bookSearchState.lastFetchedID = data[data.length - 1].id
+            } else {
+                bookSearchState.lastFetchedID = -1
+            }
+        }
+        window.onload = async () => await fetchManyBooks()
         document.getElementById("search").addEventListener('click', e => {
             e.preventDefault()
-            generateListForm(
-                fields = ['id', 'title', 'author', 'type', 'count', 'cover'],
-                submitEndpoint = '/internal/books?',
-            )
+            fetchManyBooks()
         })
     </script>
 </body>

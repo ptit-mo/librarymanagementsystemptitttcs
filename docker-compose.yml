@@ -18,6 +18,7 @@ services:
     depends_on:
       - miniocreatebuckets
       - database
+    restart: always
 
   database:
     image: postgres:12

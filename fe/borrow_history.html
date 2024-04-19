@@ -14,38 +14,229 @@
 <body>
     <div>
         <header class="navbar navbar-static-top" id="navbar"></header>
-        <div class="d-flex">
-            <div class="container" id="addContainer"></div>
-            <div class="container" id="addPreview"></div>
+        <div id="admin-addbh" class="d-flex">
+            <div class="container" id="addContainer">
+                <form>
+                    <div class="form-group">
+                        <label class="input-group-text" for="user_id">User ID:</label>
+                        <input type="number" class="form-control" id="bh-user_id" name="user_id" required="">
+                    </div>
+                    <div class="form-group">
+                        <label class="input-group-text" for="book_id">Book ID:</label>
+                        <input type="number" class="form-control" id="bh-book_id" name="book_id" required="">
+                    </div>
+                    <input type="submit" id="add-bh-btn" value="Add new Borrow History">
+
+                </form>
+            </div>
+            <div class="container" id="addPreview">
+                <div>
+                    <div class="preview" id="bhpreview">
+                        <h3>Preview</h3>
+                        <p><strong>Username:</strong> <span id="bh-user-namepreview"></span>
+                        </p>
+                        <p><strong>Total borrowed books:</strong> <span id="bh-user-cntpreview"></span>
+                        </p>
+                        <p><strong>Title:</strong> <span id="bh-book-titlepreview"></span>
+                        </p>
+                        <p><strong>Author:</strong> <span id="bh-book-authorpreview"></span>
+                        </p>
+                        <p><strong>Available:</strong> <span id="bh-book-cntpreview"></span>
+                        </p>
+                        <p><strong>Valid:</strong> <span id="bh-validatepreview"></span>
+                        </p>
+
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="ccenter container">
-            <label for="offset">Next Offset: </label>
-            <input type="number" name="offset" id="offset">
+        <div id="status-box"></div>
+        <div id="search-center" class="ccenter container">
+            <input type="number" id="search-userid">
             <button id="search">Search</button>
         </div>
-        <table id="list">
+        <table>
+            <thead>
+                <tr>
+                    <th id="id-header">id</th>
+                    <th id="userid-header">user id</th>
+                    <th id="username-header">username</th>
+                    <th id="bookid-header">book id</th>
+                    <th id="book-title-header">book title</th>
+                    <th id="borrowed-at-header">borrowed at</th>
+                    <th id="status-header">status</th>
+                    <th id="edit-header">edit</th>
+                </tr>
+            </thead>
+            <tbody id="list"></tbody>
         </table>
     </div>
     <script>
+        if (!localStorage.getItem('user_type') || localStorage.getItem('user_type') === 'borrower') {
+            document.getElementById('search-center').style.display = 'none'
+            document.getElementById('admin-addbh').style.display = 'none'
+        }
+        const maxBooksAllowedToBorrowPerUser = 3
+        const borrowHistorySearchState = {
+            limit: 10,
+            lastFetchedID: -1,
+        }
         generateNavBar()
-        generateAddForm(itemName = 'Borrow History',
-            fields = [
-                { name: 'user_id', type: 'number', label: 'User ID' },
-                { name: 'book_id', type: 'number', label: 'Book ID' },
-            ],
-            submitEndpoint = '/librarian/bookborrow',
-        )
-        generateListForm(
-            fields = ['id', 'username', 'title', 'borrowed_at', 'returned_at'],
-            submitEndpoint = '/internal/borrowhistory?',
-        )
+        updateUserPreview = async () => {
+            let user_id = document.getElementById(`bh-user_id`).value
+            let user = await fetchData(`/internal/user/${user_id}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include'
+            })
+            document.getElementById(`bh-user-namepreview`).innerText = user.username
+            let total_borrowed_cnt_res = await fetchData(`/librarian/borrowcount/${user_id}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include'
+            })
+            document.getElementById(`bh-user-cntpreview`).innerText = total_borrowed_cnt_res.count
+            if (total_borrowed_cnt_res.count > maxBooksAllowedToBorrowPerUser) {
+                document.getElementById(`bh-user-cntpreview`).style.color = 'red'
+            } else {
+                document.getElementById(`bh-user-cntpreview`).style.color = 'green'
+            }
+            validatePreview()
+        }
+        updateBookPreview = async () => {
+            let book_id = document.getElementById(`bh-book_id`).value
+            let book = await fetchData(`/internal/book/${book_id}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include'
+            })
+            document.getElementById(`bh-book-titlepreview`).innerText = book.title
+            document.getElementById(`bh-book-authorpreview`).innerText = book.author
+            let bookCntElem = document.getElementById(`bh-book-cntpreview`)
+            bookCntElem.innerText = book.count
+            if (book.count.count <= 0) {
+                bookCntElem.style.color = 'red'
+            } else {
+                bookCntElem.style.color = 'green'
+            }
+            validatePreview()
+        }
+        validatePreview = async () => {
+            document.getElementById(`add-bh-btn`).disabled = true
+            let validationPreviewElem = document.getElementById(`bh-validatepreview`)
+            let user_id = document.getElementById(`bh-user_id`).value
+            let book_id = document.getElementById(`bh-book_id`).value
+            let userAlreadyBorrowed = false
+            if (user_id !== "" && book_id !== "") {
+                try {
+                    let checkExistingBorrowRecord = await fetchJSONData(`/librarian/borrowrecord?user_id=${user_id}&book_id=${book_id}`, {
+                        method: 'GET',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        credentials: 'include'
+                    })
+                    if (checkExistingBorrowRecord != undefined || !checkExistingBorrowRecord.returned) {
+                        userAlreadyBorrowed = true
+                    }
+                } catch (e) {
+                    // not found
+                }
+            }
+            let available = parseInt(document.getElementById("bh-book-cntpreview").innerText)
+            let borrowedCnt = parseInt(document.getElementById("bh-user-cntpreview").innerText)
+            if (!userAlreadyBorrowed || (available > 0 && borrowedCnt < maxBooksAllowedToBorrowPerUser)) {
+                validationPreviewElem.innerText = 'YES'
+                validationPreviewElem.style.color = 'green'
+                document.getElementById(`add-bh-btn`).disabled = false
+            } else {
+                validationPreviewElem.innerText = 'NO'
+                validationPreviewElem.style.color = 'red'
+                document.getElementById(`add-bh-btn`).disabled = true
+            }
+        }
+        document.getElementById(`bh-user_id`).addEventListener('change', updateUserPreview)
+        document.getElementById(`bh-book_id`).addEventListener('change', updateBookPreview)
+        // handle form submit
+        document.querySelector('form').addEventListener('submit', async e => {
+            e.preventDefault()
+            // then upload borrowHistory
+            const formData = new FormData()
+            for (let field of ['user_id', 'book_id']) {
+                formData.append(field, document.getElementById(`bh-${field}`).value)
+            }
+            try {
+                response = await postFormDataAsJson({ url: '/librarian/bookborrow', formData: formData, intInputFields: ['user_id', 'book_id'] })
+                document.getElementById(`add-bh-btn`).disabled = true
+                borrowHistorySearchState.lastFetchedID = -1
+                await fetchManyBorrowRecords()
+            } catch (e) {
+                throw e
+            }
+        })
+
+        // handle list
+        fetchManyBorrowRecords = async () => {
+            let userID = document.getElementById(`search-userid`).value
+            const response = await fetchData(`/internal/borrowhistory?userid=${userID}&lastID=${borrowHistorySearchState.lastFetchedID}&limit=${borrowHistorySearchState.limit}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include'
+            })
+            const data = await response;
+            document.getElementById("list").innerHTML = ""
+            data.forEach(item => {
+                const row = document.createElement('tr')
+                row.id = item.id + "-borrowHistory-row"
+                let bhStatus = `<td></td>`
+                if (item.returned === true) {
+                    bhStatus = `<td>returned</td>`
+                } else {
+                    let usersHasBorrowedForNDays = Math.abs(new Date() - new Date(item.borrowed_at)) / 86400000
+                    if (usersHasBorrowedForNDays <= 3) {
+                        bhStatus = `<td bgcolor="green">borrowing</td>`
+                    } else {
+                        bhStatus = `<td bgcolor="red">over due for ${usersHasBorrowedForNDays} days</td>`
+                    }
+                }
+                row.innerHTML = `
+                <td>${item.id}</td>
+                <td>${item.user_id}</td>
+                <td>${item.username}</td>
+                <td>${item.book_id}</td>
+                <td>${item.title}</td>
+                <td>${item.borrowed_at}</td>
+                ${bhStatus}
+                <td> <button id="${item.id}-borrowHistory-btn" ${item.returned && `style="display: none;"`}>Return</button></td>`
+                document.getElementById("list").appendChild(row)
+
+                document.getElementById(`${item.id}-borrowHistory-btn`).addEventListener('click', e => {
+                    e.preventDefault()
+                    removeByID('/librarian/bookreturn/{id}', item.id)
+                    document.getElementById(item.id + "-borrowHistory-row").remove()
+                })
+                document.getElementById(`search-userid`).value = ""
+            })
+            if (data.length == borrowHistorySearchState.limit) {
+                borrowHistorySearchState.lastFetchedID = data[data.length - 1].id
+            } else {
+                borrowHistorySearchState.lastFetchedID = -1
+            }
+        }
+        window.onload = async () => await fetchManyBorrowRecords()
         document.getElementById("search").addEventListener('click', e => {
             e.preventDefault()
-            generateListForm(
-                fields = ['id', 'username', 'title', 'borrowed_at', 'returned_at'],
-                submitEndpoint = '/internal/borrowhistory?',
-            )
+            fetchManyBorrowRecords()
         })
+
     </script>
 </body>
 
