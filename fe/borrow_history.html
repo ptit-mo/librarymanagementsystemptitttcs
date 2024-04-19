@@ -161,8 +161,8 @@
                 document.getElementById(`add-bh-btn`).disabled = true
             }
         }
-        document.getElementById(`bh-user_id`).addEventListener('change', updateUserPreview)
-        document.getElementById(`bh-book_id`).addEventListener('change', updateBookPreview)
+        document.getElementById(`bh-user_id`).addEventListener('input', updateUserPreview)
+        document.getElementById(`bh-book_id`).addEventListener('input', updateBookPreview)
         // handle form submit
         document.querySelector('form').addEventListener('submit', async e => {
             e.preventDefault()

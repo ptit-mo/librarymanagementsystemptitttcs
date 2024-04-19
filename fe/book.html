@@ -54,24 +54,6 @@
 
                 </form>
             </div>
-            <div class="container" id="addPreview">
-                <div>
-                    <div class="preview" id="bookpreview">
-                        <h3>Preview</h3>
-
-                        <p><strong>Title:</strong> <span id="book-titlepreview"></span></p>
-
-                        <p><strong>Author:</strong> <span id="book-authorpreview"></span></p>
-
-                        <p><strong>Cover:</strong> <span id="book-coverpreview"></span></p>
-
-                        <p><strong>Quantity:</strong> <span id="book-countpreview"></span></p>
-
-                        <p><strong>Type:</strong> <span id="book-typepreview"></span></p>
-
-                    </div>
-                </div>
-            </div>
         </div>
         <div id="status-box"></div>
         <div class="ccenter container">
@@ -94,27 +76,11 @@
     </div>
     <script src="js/script.js"></script>
     <script>
+        generateNavBar()
         const bookSearchState = {
             limit: 10,
             lastFetchedID: -1,
         }
-        generateNavBar()
-        for (let id of ['title', 'author', 'type', 'count']) {
-            let inp = document.getElementById(`book-${id}`)
-            document.getElementById(`book-${id}preview`).innerText = inp.value
-            inp.addEventListener('input', e => {
-                document.getElementById(`book-${id}preview`).innerText = e.target.value
-            })
-        }
-        // update file preview
-        document.getElementById("book-cover").addEventListener('change', e => {
-            const file = e.target.files[0]
-            const reader = new FileReader()
-            reader.onload = e => {
-                document.getElementById('book-coverpreview').innerHTML = `<img style="display: block; max-width: 300px; max-height: 200px; width: auto; height: auto" src="${e.target.result}" alt="Uploaded image" />`;
-            }
-            reader.readAsDataURL(file)
-        })
         // handle form submit
         document.querySelector('form').addEventListener('submit', async e => {
             e.preventDefault()
@@ -163,7 +129,7 @@
                 <td>${item.author}</td>
                 <td>${item.type}</td>
                 <td>${item.count}</td>
-                <td><img style="display: block; max-width: 300px; max-height: 200px; width: auto; height: auto" src="${item.cover}" alt="Uploaded image" /></td>
+                <td><img style="display: block; max-width: 300px; max-height: 200px; width: auto; height: auto" src="${getThumbnailURL(item.cover)}" alt="Uploaded image" /></td>
                 <td><button id="${item.id}-book-btn">Remove</button></td>`
                 document.getElementById("list").appendChild(row)
 

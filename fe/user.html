@@ -53,22 +53,6 @@
 
                 </form>
             </div>
-            <div class="container" id="addPreview">
-                <div>
-                    <div class="preview" id="userpreview">
-                        <h3>Preview</h3>
-
-                        <p><strong>User Name:</strong> <span id="user-usernamepreview"></span></p>
-
-                        <p><strong>Email:</strong> <span id="user-emailpreview"></span></p>
-
-                        <p><strong>Password:</strong> <span id="user-passwordpreview"></span></p>
-
-                        <p><strong>Type:</strong> <span id="user-typepreview"></span></p>
-
-                    </div>
-                </div>
-            </div>
         </div>
         <div id="status-box"></div>
         <div class="ccenter container">
@@ -93,13 +77,6 @@
             lastFetchedID: -1,
         }
         generateNavBar()
-        for (let id of ['username', 'email', 'password', 'type']) {
-            let inp = document.getElementById(`user-${id}`)
-            document.getElementById(`user-${id}preview`).innerText = inp.value
-            inp.addEventListener('input', e => {
-                document.getElementById(`user-${id}preview`).innerText = e.target.value
-            })
-        }
         // handle form submit
         document.querySelector('form').addEventListener('submit', async e => {
             e.preventDefault()

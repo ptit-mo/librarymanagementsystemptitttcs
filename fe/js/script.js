@@ -156,7 +156,7 @@ function createGridFromData({
         gridItem.classList.add(gridItemClass);
 
         const readonlyDiv = document.createElement("div");
-        readonlyDiv.appendChild(createAnImage(item[thumbnailKey]));
+        readonlyDiv.appendChild(createAnImage(getThumbnailURL(item[thumbnailKey])));
 
         const overlayDiv = document.createElement("div");
         overlayDiv.classList.add("overlay");
@@ -184,4 +184,14 @@ function createAnImage(src) {
     img.style.height = "auto";
     img.style.display = "block";
     return img
+}
+
+const minio_host = "http://localhost:9000"
+var getLocation = function (href) {
+    var l = document.createElement("a");
+    l.href = href;
+    return l;
+}
+function getThumbnailURL(originalURL) {
+    return `${minio_host}${getLocation(originalURL).pathname}`
 }
