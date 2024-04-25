@@ -27,6 +27,7 @@ Web based system for librarians to manage physically borrowed books
 
 # 4. Usage
 
+- `cp .env.sample .env`
 - start by `make buildup`
 - open http://localhost:8080/fe/login.html, login with username/ password `admin`/`admin` then start playing around
 - stop by `make destroy`
